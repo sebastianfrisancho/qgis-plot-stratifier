@@ -116,12 +116,25 @@ biomass_value: Floating-point raster value (rounded to 2 decimal places).
 
 biomass_class: Assigned dynamic category (High, Medium, Low).
 
-Requirements
-QGIS 3.x
+---
 
-Python 3
+## Requirements
 
-NumPy
+* **QGIS 3.x**
+* **Python 3**
+* **NumPy**
 
-License
-This project is licensed under the MIT License.
+---
+
+## 👨‍💻 Developer & Author
+
+**Sebastian Frisancho**  
+*GIS Specialist & Forest Ecology Researcher*  
+* **GitHub:** [@sebastianfrisancho](https://github.com/sebastianfrisancho)
+* **LinkedIn:** [Sebastian Frisancho](https://linkedin.com/in/sebastian-marcelo-frisancho-flores-a0226a125)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
