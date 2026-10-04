@@ -38,8 +38,10 @@ from qgis.core import (
     QgsGeometry,
     QgsPointXY,
     QgsProject,
+    QgsRasterLayer,
     QgsSpatialIndex,
     QgsVectorLayer,
+    QgsWkbTypes,
     QgsMessageLog,
     Qgis
 )
@@ -74,19 +76,35 @@ def log(message: str, level: Qgis.MessageLevel = Qgis.Info):
 def load_layers(poly_name: str, veg_name: str, raster_name: str) -> Tuple[QgsVectorLayer, QgsVectorLayer, QgsRasterLayer]:
     """Loads and validates required QGIS layers."""
     project = QgsProject.instance()
-    try:
-        poly = project.mapLayersByName(poly_name)[0]
-        veg = project.mapLayersByName(veg_name)[0]
-        raster = project.mapLayersByName(raster_name)[0]
-        return poly, veg, raster
-    except IndexError as e:
-        raise FileNotFoundError(f"One or more layers were not found: {poly_name}, {veg_name}, {raster_name}. Error: {e}")
+    missing = [
+        name for name in (poly_name, veg_name, raster_name)
+        if not project.mapLayersByName(name)
+    ]
+    if missing:
+        raise FileNotFoundError("Layer(s) not found in the current QGIS project: " + ", ".join(missing))
+
+    poly = project.mapLayersByName(poly_name)[0]
+    veg = project.mapLayersByName(veg_name)[0]
+    raster = project.mapLayersByName(raster_name)[0]
+
+    if not poly.isValid() or poly.geometryType() != QgsWkbTypes.PolygonGeometry:
+        raise ValueError(f"Study area layer '{poly_name}' must be a valid polygon layer.")
+    if not veg.isValid() or veg.geometryType() != QgsWkbTypes.PolygonGeometry:
+        raise ValueError(f"Vegetation layer '{veg_name}' must be a valid polygon layer.")
+    if not raster.isValid():
+        raise ValueError(f"Biomass raster '{raster_name}' is invalid.")
+    return poly, veg, raster
 
 
 def generate_candidates(poly_layer: QgsVectorLayer, veg_layer: QgsVectorLayer, 
                         raster_layer: QgsVectorLayer, veg_column: str,
                         candidates_limit: int, max_attempts: int) -> Tuple[Dict[int, List[CandidatePoint]], List[float]]:
     """Generates random spatial candidate points within each polygon boundary."""
+    if veg_column not in veg_layer.fields().names():
+        raise ValueError(f"Vegetation field '{veg_column}' does not exist in layer '{veg_layer.name()}'.")
+    if candidates_limit < 1 or max_attempts < 1:
+        raise ValueError("candidates_limit and max_attempts must both be positive integers.")
+
     veg_index = QgsSpatialIndex(veg_layer.getFeatures())
     raster_provider = raster_layer.dataProvider()
     
@@ -96,6 +114,9 @@ def generate_candidates(poly_layer: QgsVectorLayer, veg_layer: QgsVectorLayer,
     for poly_feat in poly_layer.getFeatures():
         poly_id = poly_feat.id()
         poly_geom = poly_feat.geometry()
+        if not poly_feat.hasGeometry() or poly_geom.isEmpty() or not poly_geom.isGeosValid():
+            log(f"Skipping polygon feature {poly_id}: missing, empty, or invalid geometry.", Qgis.Warning)
+            continue
         bbox = poly_geom.boundingBox()
         
         candidates_by_poly[poly_id] = []
@@ -115,15 +136,33 @@ def generate_candidates(poly_layer: QgsVectorLayer, veg_layer: QgsVectorLayer,
             if not veg_ids:
                 continue
             
-            veg_feat = veg_layer.getFeature(veg_ids[0])
-            veg_type = str(veg_feat[veg_column]).strip()
-            
-            # Sample raster value
-            val, res = raster_provider.sample(QgsPointXY(x, y), 1)
-            if not res or np.isnan(val):
+            # The spatial index returns bounding-box candidates; confirm actual containment.
+            matching_veg = None
+            for veg_id in veg_ids:
+                veg_feat = veg_layer.getFeature(veg_id)
+                if not veg_feat.isValid() or not veg_feat.hasGeometry():
+                    continue
+                if veg_feat.geometry().isEmpty() or not veg_feat.geometry().intersects(point_geom):
+                    continue
+                raw_veg_type = veg_feat[veg_column]
+                if raw_veg_type is None or str(raw_veg_type).strip() == "":
+                    continue
+                matching_veg = str(raw_veg_type).strip()
+                break
+            if matching_veg is None:
                 continue
-            
-            biomass_val = float(val)
+            veg_type = matching_veg
+
+            # Sample raster band 1 and skip NoData/non-numeric values.
+            val, res = raster_provider.sample(QgsPointXY(x, y), 1)
+            if not res:
+                continue
+            try:
+                biomass_val = float(val)
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(biomass_val):
+                continue
             all_biomass_values.append(biomass_val)
             
             candidates_by_poly[poly_id].append(
@@ -219,7 +258,10 @@ def optimize_selection(candidates_by_poly: Dict[int, List[CandidatePoint]],
 def create_output_layer(poly_layer: QgsVectorLayer, selection: List[Tuple[int, CandidatePoint]], output_name: str):
     """Generates the final optimized virtual memory point layer in QGIS."""
     layer_crs = poly_layer.crs()
-    out_layer = QgsVectorLayer(f"Point?crs={layer_crs.authid()}", output_name, "memory")
+    out_layer = QgsVectorLayer("Point", output_name, "memory")
+    out_layer.setCrs(layer_crs)
+    if not out_layer.isValid():
+        raise RuntimeError("Could not create the output memory layer.")
     provider = out_layer.dataProvider()
 
     # Clean standardized database fields
@@ -244,7 +286,9 @@ def create_output_layer(poly_layer: QgsVectorLayer, selection: List[Tuple[int, C
         ])
         new_features.append(new_feat)
 
-    provider.addFeatures(new_features)
+    success, _ = provider.addFeatures(new_features)
+    if not success:
+        raise RuntimeError("QGIS could not add all selected features to the output layer.")
     out_layer.updateExtents()
     QgsProject.instance().addMapLayer(out_layer)
     log(f"Output point layer '{output_name}' added to QGIS.", Qgis.Success)
