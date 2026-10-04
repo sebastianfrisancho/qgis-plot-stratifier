@@ -1,2 +1,3 @@
+# PyQGIS is provided by the QGIS installation; do not install it with pip.
+# Ensure NumPy is available in the Python environment used by QGIS.
 numpy>=1.20.0
-qgis>=3.0.0
