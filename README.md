@@ -28,10 +28,10 @@ This tool addresses those limitations using a stochastic **Monte Carlo** optimiz
 
 ## Key Features
 
-* **✅ Spatial Autonomy:** Exactly one sampling point per polygon boundary.
+* **Point allocation:** Aims to select one point inside each input polygon.
 * **✅ Dynamic Biomass Stratification:** Dynamic categorization using raster percentiles.
-* **✅ Monte Carlo Optimization:** Exploring thousands of combinations in milliseconds.
-* **✅ Automatic Vegetation Diversity Enforcement:** Prioritizes unique ecological zones.
+* **Stochastic search:** Tests randomized candidate combinations up to a configurable iteration limit; runtime depends on the data and constraints.
+* **Vegetation diversity constraint:** Avoids repeating vegetation types where the candidate pools and quotas allow it.
 * **✅ Modular Architecture:** Developed as a clean, structured Python data pipeline.
 
 ---
@@ -68,12 +68,12 @@ The algorithm requires three standard datasets loaded in QGIS:
 
 ## Optimization Constraints
 
-The optimizer simultaneously satisfies the following four rules:
+The optimizer searches for a selection that satisfies the following rules. Because it uses randomized greedy search, it may fail to find a feasible solution even when one exists:
 
-* **Rule 1:** Exactly one sampling point must be selected inside every polygon.
+* **Rule 1:** Select one sampling point inside every polygon that has a suitable candidate.
 * **Rule 2:** Global biomass quotas must match user-defined targets (e.g., 5 High, 3 Medium, 2 Low).
-* **Rule 3:** Vegetation cover types should not repeat across the selected points whenever possible.
-* **Rule 4 (Fallback):** If vegetation repetition is unavoidable due to spatial availability, the biomass classes of those repeated covers must be different.
+* **Rule 3:** Prefer vegetation cover types not already selected.
+* **Rule 4 (Fallback):** A repeated vegetation type is allowed only when its biomass class differs from the most recently selected occurrence of that type. This is not a guarantee that all repeated occurrences have distinct classes.
 
 ---
 
@@ -83,7 +83,7 @@ Unlike fixed-threshold approaches, biomass classes are calculated automatically 
 
 [Low Biomass]  <  33.33th Percentile  <  [Medium Biomass]  <  66.67th Percentile  <  [High Biomass]
 
-This allows the algorithm to adapt to any biomass raster (e.g., rain forests vs. dry forests) without modifying thresholds manually.
+Thresholds are calculated from valid raster values sampled among the generated candidate points, not from every pixel in the full raster. Results therefore depend on candidate generation and the input data.
 
 ---
 
@@ -106,13 +106,13 @@ QUOTAS = {
 }
 ```
 Attribute Output Schema
-The output is a new QGIS virtual memory layer containing the optimized points and a clean database:
+The output is a new QGIS memory point layer containing the selected points and these fields:
 
 poly_id: Unique identifier of the source polygon.
 
 vegetation_type: Specific vegetation cover where the point landed.
 
-biomass_value: Floating-point raster value (rounded to 2 decimal places).
+biomass_value: Floating-point raster value, rounded to 2 decimal places.
 
 biomass_class: Assigned dynamic category (High, Medium, Low).
 
@@ -131,7 +131,7 @@ biomass_class: Assigned dynamic category (High, Medium, Low).
 **Sebastian Frisancho**  
 *GIS Specialist & Forest Ecology Researcher*  
 * **GitHub:** [@sebastianfrisancho](https://github.com/sebastianfrisancho)
-* **LinkedIn:** [Sebastian Frisancho](https://linkedin.com/in/sebastian-marcelo-frisancho-flores-a0226a125)
+* **LinkedIn:** [Sebastian Frisancho](https://www.linkedin.com/in/sebastianfrisancho/)
 
 ---
 
