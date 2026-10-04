@@ -93,6 +93,13 @@ def load_layers(poly_name: str, veg_name: str, raster_name: str) -> Tuple[QgsVec
         raise ValueError(f"Vegetation layer '{veg_name}' must be a valid polygon layer.")
     if not raster.isValid():
         raise ValueError(f"Biomass raster '{raster_name}' is invalid.")
+
+    # Spatial operations assume all inputs use the same coordinate reference system.
+    if poly.crs() != veg.crs() or poly.crs() != raster.crs():
+        raise ValueError(
+            "Study areas, vegetation polygons, and biomass raster must use the same CRS. "
+            "Reproject the inputs before running the tool."
+        )
     return poly, veg, raster
 
 
@@ -321,8 +328,23 @@ def main():
 
     try:
         poly_layer, veg_layer, raster_layer = load_layers(STUDY_AREAS_LAYER, VEGETATION_LAYER, BIOMASS_RASTER)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         log(str(e), Qgis.Critical)
+        return
+
+    if not QUOTAS or any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in QUOTAS.values()
+    ):
+        log("ERROR: QUOTAS must contain non-negative integer values.", Qgis.Critical)
+        return
+    polygon_count = poly_layer.featureCount()
+    if sum(QUOTAS.values()) != polygon_count:
+        log(
+            f"ERROR: Quota total ({sum(QUOTAS.values())}) must equal the number "
+            f"of input polygons ({polygon_count}).",
+            Qgis.Critical,
+        )
         return
 
     # Pipeline execution
