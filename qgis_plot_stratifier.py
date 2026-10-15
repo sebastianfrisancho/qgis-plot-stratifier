@@ -105,7 +105,8 @@ def load_layers(poly_name: str, veg_name: str, raster_name: str) -> Tuple[QgsVec
 
 def generate_candidates(poly_layer: QgsVectorLayer, veg_layer: QgsVectorLayer, 
                         raster_layer: QgsVectorLayer, veg_column: str,
-                        candidates_limit: int, max_attempts: int) -> Tuple[Dict[int, List[CandidatePoint]], List[float]]:
+                        candidates_limit: int, max_attempts: int,
+                        rng: random.Random) -> Tuple[Dict[int, List[CandidatePoint]], List[float]]:
     """Generates random spatial candidate points within each polygon boundary."""
     if veg_column not in veg_layer.fields().names():
         raise ValueError(f"Vegetation field '{veg_column}' does not exist in layer '{veg_layer.name()}'.")
@@ -131,8 +132,8 @@ def generate_candidates(poly_layer: QgsVectorLayer, veg_layer: QgsVectorLayer,
         
         while len(candidates_by_poly[poly_id]) < candidates_limit and attempts < max_attempts:
             attempts += 1
-            x = random.uniform(bbox.xMinimum(), bbox.xMaximum())
-            y = random.uniform(bbox.yMinimum(), bbox.yMaximum())
+            x = rng.uniform(bbox.xMinimum(), bbox.xMaximum())
+            y = rng.uniform(bbox.yMinimum(), bbox.yMaximum())
             point_geom = QgsGeometry.fromPointXY(QgsPointXY(x, y))
             
             if not point_geom.within(poly_geom):
@@ -205,7 +206,8 @@ def classify_candidates(candidates_by_poly: Dict[int, List[CandidatePoint]], p33
 
 
 def optimize_selection(candidates_by_poly: Dict[int, List[CandidatePoint]], 
-                       quotas: Dict[str, int], max_iterations: int) -> Optional[List[Tuple[int, CandidatePoint]]]:
+                       quotas: Dict[str, int], max_iterations: int,
+                       rng: random.Random) -> Optional[List[Tuple[int, CandidatePoint]]]:
     """Solves the spatial constraints puzzle using a Monte Carlo Simulation."""
     poly_ids = list(candidates_by_poly.keys())
     best_selection = None
@@ -219,12 +221,12 @@ def optimize_selection(candidates_by_poly: Dict[int, List[CandidatePoint]],
         current_counts = {key: 0 for key in quotas.keys()}
         used_vegetation = {}  # {vegetation_type: biomass_class}
         
-        random.shuffle(poly_ids)
+        rng.shuffle(poly_ids)
         valid_iteration = True
         
         for pid in poly_ids:
             pool = candidates_by_poly[pid]
-            random.shuffle(pool)
+            rng.shuffle(pool)
             
             point_selected = False
             for candidate in pool:
@@ -324,6 +326,10 @@ def main():
     MAX_ITERATIONS = 5000
     CANDIDATES_PER_POLY = 100
     MAX_ATTEMPTS_PER_POLY = 1000
+
+    # Set an integer (e.g., 42) for repeatable candidate generation and search.
+    # Keep None to use a different random sequence on each run.
+    RANDOM_SEED = None
     # =============================================================================
 
     try:
@@ -347,10 +353,14 @@ def main():
         )
         return
 
+    # One RNG is shared across candidate generation and optimization so a fixed
+    # seed reproduces the same random sequence for identical inputs.
+    rng = random.Random(RANDOM_SEED)
+
     # Pipeline execution
     candidates, biomass_values = generate_candidates(
         poly_layer, veg_layer, raster_layer, VEGETATION_COLUMN, 
-        CANDIDATES_PER_POLY, MAX_ATTEMPTS_PER_POLY
+        CANDIDATES_PER_POLY, MAX_ATTEMPTS_PER_POLY, rng
     )
     
     try:
@@ -362,7 +372,7 @@ def main():
 
     classify_candidates(candidates, p33, p66)
     
-    selection = optimize_selection(candidates, QUOTAS, MAX_ITERATIONS)
+    selection = optimize_selection(candidates, QUOTAS, MAX_ITERATIONS, rng)
     
     if not selection:
         log("ERROR: Optimization failed to satisfy all strict constraints. Try revising quotas.", Qgis.Warning)
