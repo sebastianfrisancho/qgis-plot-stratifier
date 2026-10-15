@@ -104,8 +104,16 @@ QUOTAS = {
     "Medium": 3, 
     "Low": 2
 }
+
+MAX_ITERATIONS = 5000
+CANDIDATES_PER_POLY = 100
+MAX_ATTEMPTS_PER_POLY = 1000
+
+# Optional: use an integer to reproduce the random sequence.
+RANDOM_SEED = 42
 ```
-Attribute Output Schema
+## Attribute Output Schema
+
 The output is a new QGIS memory point layer containing the selected points and these fields:
 
 poly_id: Unique identifier of the source polygon.
