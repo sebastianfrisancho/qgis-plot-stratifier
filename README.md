@@ -83,7 +83,7 @@ Unlike fixed-threshold approaches, biomass classes are calculated automatically 
 
 [Low Biomass]  <  33.33th Percentile  <  [Medium Biomass]  <  66.67th Percentile  <  [High Biomass]
 
-Thresholds are calculated from valid raster values sampled among the generated candidate points, not from every pixel in the full raster. Results therefore depend on candidate generation and the input data.
+Thresholds are calculated from valid raster values sampled among the generated candidate points, not from every pixel in the full raster. Results therefore depend on candidate generation and the input data. Set `RANDOM_SEED` to an integer to make candidate generation and the stochastic search repeatable for identical inputs and processing conditions; use `None` for a different random sequence on each run.
 
 ---
 
@@ -117,6 +117,10 @@ biomass_value: Floating-point raster value, rounded to 2 decimal places.
 biomass_class: Assigned dynamic category (High, Medium, Low).
 
 ---
+
+## Reproducibility and limitations
+
+This tool uses randomized candidate generation and a randomized greedy search. A fixed random seed helps reproduce a run, but does not guarantee that a feasible solution will be found. Input feature order, QGIS/GEOS versions, raster provider behavior, and data changes can affect results. Review the selected points and class counts before using them for fieldwork or scientific inference.
 
 ## Requirements
 
