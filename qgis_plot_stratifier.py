@@ -104,7 +104,7 @@ def load_layers(poly_name: str, veg_name: str, raster_name: str) -> Tuple[QgsVec
 
 
 def generate_candidates(poly_layer: QgsVectorLayer, veg_layer: QgsVectorLayer, 
-                        raster_layer: QgsVectorLayer, veg_column: str,
+                        raster_layer: QgsRasterLayer, veg_column: str,
                         candidates_limit: int, max_attempts: int,
                         rng: random.Random) -> Tuple[Dict[int, List[CandidatePoint]], List[float]]:
     """Generates random spatial candidate points within each polygon boundary."""
@@ -363,6 +363,22 @@ def main():
         CANDIDATES_PER_POLY, MAX_ATTEMPTS_PER_POLY, rng
     )
     
+    if len(candidates) != polygon_count:
+        log(
+            f"ERROR: Candidate generation processed {len(candidates)} of {polygon_count} "
+            "study polygons. Check for invalid or empty polygon geometries.",
+            Qgis.Critical,
+        )
+        return
+    polygons_without_candidates = [pid for pid, pool in candidates.items() if not pool]
+    if polygons_without_candidates:
+        log(
+            f"ERROR: No valid candidates were generated for {len(polygons_without_candidates)} "
+            "study polygon(s). Increase candidate attempts or inspect vegetation/raster coverage.",
+            Qgis.Critical,
+        )
+        return
+
     try:
         p33, p66 = calculate_percentiles(biomass_values)
         log(f"Dynamic Thresholds: Low < {p33:.2f} | Med: {p33:.2f} - {p66:.2f} | High > {p66:.2f}")
